@@ -171,7 +171,7 @@ func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*C
 		return nil, fmt.Errorf("Load: failed to read compose file: %w", err)
 	}
 
-	var parsedContent RawCompose
+	var parsedContent rawCompose
 	err = yaml.Unmarshal([]byte(content), &parsedContent)
 	if err != nil {
 		return nil, fmt.Errorf("Load: failed to parse compose file: %w", err)

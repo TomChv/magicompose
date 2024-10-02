@@ -30,7 +30,7 @@ type Compose struct {
 	Services []*ComposeService
 }
 
-type RawCompose struct {
+type rawCompose struct {
 	Services map[string]struct {
 		Volumes []string `yaml:"volumes"`
 	} `yaml:"services"`
