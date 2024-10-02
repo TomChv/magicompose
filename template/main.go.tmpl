@@ -13,13 +13,13 @@ func (m *Services) {{ $service.Name | ToUpper }}(
 
 	{{- $volumeLength := len $service.Volumes -}}
 	{{- if gt $volumeLength 0 -}}
-	// Bound volume detected in your compose file, please pass the directory to the service
-	// Example: 
-	// // +defaultPath="config"
-	// configDir *dagger.Directory
-	//
-	// // +defaultPath="config/postgres.conf"
-	// postgresConf *dagger.File
+		{{- range $i, $volume := $service.Volumes }}
+			{{- if IsBind $volume }}
+	
+	// +defaultPath="{{ $volume.Origin | ConvertPathToContextDir }}"
+	volume{{ $i }} {{ VolumeToFileOrDirectory $volume }},
+			{{- end }}
+		{{- end }}
 	{{- end }}
 ) (*dagger.Service, error) {
 	return dag.Container().
@@ -36,18 +36,24 @@ func (m *Services) {{ $service.Name | ToUpper }}(
 		WithExposedPort({{ $port.Target }}).
 		{{- end }}
 
-		{{- range $volume := $service.Volumes }}
+		{{- range $i, $volume := $service.Volumes }}
 			{{- if IsCache $volume }}
-		WithMountedCache("{{ $volume.Destination }}", dag.CacheVolume("{{ $service.Name }}-ADD_NAME_HERE")). // Add a specific cache key there.
+		WithMountedCache("{{ $volume.Destination }}", dag.CacheVolume("{{ $service.Name }}-{{ $volume.Origin }}")).
 			{{- end }}
 
 			{{- if IsBind $volume }}
-		// Mounted volume detected in your compose file, please pass the directory as argument and mount it
-		// there in the service.
+
+			{{- if IsDir $volume }}
 		WithMountedDirectory(
 			"{{ $volume.Destination }}", 
-			// The directory passed as argument to this function.	
+			volume{{ $i }},
 		).
+			{{- else }}
+		WithMountedFile(
+			"{{ $volume.Destination }}", 
+			volume{{ $i }},
+		).
+			{{- end }}
 			{{- end }}
 
 		{{- end }}

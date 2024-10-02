@@ -6,10 +6,12 @@ import (
 	"dagger/magicompose/internal/dagger"
 	"fmt"
 	"text/template"
+	"strings"
 
 	"github.com/compose-spec/compose-go/loader"
 	"github.com/compose-spec/compose-go/types"
 	"github.com/iancoleman/strcase"
+	"gopkg.in/yaml.v2"
 )
 
 type Magicompose struct {
@@ -30,6 +32,13 @@ func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
 		return nil, fmt.Errorf("Generate: failed to inspect compose file: %w", err)
 	}
 
+	for _, service := range compose.Services {
+		service.Volumes, err = m.parseRawVolumes(ctx, service.Name)
+		if err != nil {
+			return nil, fmt.Errorf("Generate: failed to parse volumes: %w", err)
+		}
+	}
+
 	templateDir := dag.CurrentModule().Source().Directory("template")
 	templateFile, err := templateDir.File("main.go.tmpl").Contents(ctx)
 	if err != nil {
@@ -43,6 +52,27 @@ func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
 		},
 		"IsCache": func(volume *ComposeVolume) bool {
 			return volume.Type == "volume"
+		},
+		"VolumeToFileOrDirectory": func(volume *ComposeVolume) string {
+			if strings.HasSuffix(volume.Origin, "/") {
+				return "*dagger.Directory"
+			}
+
+			return "*dagger.File"
+		},
+		"ConvertPathToContextDir": func(path string) string {
+			if strings.HasPrefix(path, "./") {
+				path = strings.Replace(path, "./", "/", 1)
+			}
+
+			if strings.HasSuffix(path, "/") {
+				path = strings.TrimSuffix(path, "/")
+			}
+
+			return path
+		},
+		"IsDir": func(volume *ComposeVolume) bool {
+			return strings.HasSuffix(volume.Origin, "/")
 		},
 	})
 
@@ -133,4 +163,44 @@ func (m *Magicompose) load(ctx context.Context) (*types.Project, error) {
 	}
 
 	return project, nil
+}
+
+func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*ComposeVolume, error) {
+	content, err := m.File.Contents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("Load: failed to read compose file: %w", err)
+	}
+
+	var parsedContent RawCompose
+	err = yaml.Unmarshal([]byte(content), &parsedContent)
+	if err != nil {
+		return nil, fmt.Errorf("Load: failed to parse compose file: %w", err)
+	}
+
+	volumes, ok := parsedContent.Services[service]
+	if !ok {
+		return nil, fmt.Errorf("Load: failed to find service %s in compose file", service)
+	}
+
+	var result []*ComposeVolume
+	for _, volume := range volumes.Volumes {
+		if strings.HasPrefix(volume, "./") {
+			paths := strings.Split(volume, ":")
+			result = append(result, &ComposeVolume{
+				Type:        "bind",
+				Origin:      paths[0],
+				Destination: paths[1],
+			})
+		} else {
+			paths := strings.Split(volume, ":")
+
+			result = append(result, &ComposeVolume{
+				Type:        "volume",
+				Origin:      paths[0],
+				Destination: paths[1],
+			})
+		}
+	}
+
+	return result, nil
 }
