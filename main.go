@@ -27,7 +27,7 @@ func New(
 }
 
 func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
-	compose, err := m.Inspect(ctx)
+	compose, err := m.inspect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("Generate: failed to inspect compose file: %w", err)
 	}
@@ -47,13 +47,13 @@ func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
 
 	tmpl := template.New("compose").Funcs(template.FuncMap{
 		"ToUpper": strcase.ToCamel,
-		"IsBind": func(volume *ComposeVolume) bool {
+		"IsBind": func(volume *composeVolume) bool {
 			return volume.Type == "bind"
 		},
-		"IsCache": func(volume *ComposeVolume) bool {
+		"IsCache": func(volume *composeVolume) bool {
 			return volume.Type == "volume"
 		},
-		"VolumeToFileOrDirectory": func(volume *ComposeVolume) string {
+		"VolumeToFileOrDirectory": func(volume *composeVolume) string {
 			if strings.HasSuffix(volume.Origin, "/") {
 				return "*dagger.Directory"
 			}
@@ -71,7 +71,7 @@ func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
 
 			return path
 		},
-		"IsDir": func(volume *ComposeVolume) bool {
+		"IsDir": func(volume *composeVolume) bool {
 			return strings.HasSuffix(volume.Origin, "/")
 		},
 	})
@@ -92,23 +92,23 @@ func (m *Magicompose) Generate(ctx context.Context) (*dagger.Directory, error) {
 	return templateDir.WithNewFile("main.go", buf.String()).WithoutFile("main.go.tmpl"), nil
 }
 
-func (m *Magicompose) Inspect(ctx context.Context) (*Compose, error) {
+func (m *Magicompose) inspect(ctx context.Context) (*compose, error) {
 	project, err := m.load(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("Inspect: failed to load compose file: %w", err)
 	}
 
-	compose := &Compose{}
+	compose := &compose{}
 
 	for _, service := range project.Services {
-		_service := &ComposeService{
+		_service := &composeService{
 			Name:    service.Name,
 			Image:   service.Image,
 			Command: service.Command,
 		}
 
 		for _, volume := range service.Volumes {
-			_service.Volumes = append(_service.Volumes, &ComposeVolume{
+			_service.Volumes = append(_service.Volumes, &composeVolume{
 				Type:        volume.Type,
 				Origin:      volume.Source,
 				Destination: volume.Target,
@@ -116,14 +116,14 @@ func (m *Magicompose) Inspect(ctx context.Context) (*Compose, error) {
 		}
 
 		for name, value := range service.Environment {
-			_service.Env = append(_service.Env, &ComposeEnv{
+			_service.Env = append(_service.Env, &composeEnv{
 				Name:  name,
 				Value: value,
 			})
 		}
 
 		for _, port := range service.Ports {
-			_service.Ports = append(_service.Ports, &ComposePort{
+			_service.Ports = append(_service.Ports, &composePort{
 				Protocol: port.Protocol,
 				Port:     port.HostIP,
 				Target:   int(port.Target),
@@ -165,7 +165,7 @@ func (m *Magicompose) load(ctx context.Context) (*types.Project, error) {
 	return project, nil
 }
 
-func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*ComposeVolume, error) {
+func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*composeVolume, error) {
 	content, err := m.File.Contents(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("Load: failed to read compose file: %w", err)
@@ -182,11 +182,11 @@ func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*C
 		return nil, fmt.Errorf("Load: failed to find service %s in compose file", service)
 	}
 
-	var result []*ComposeVolume
+	var result []*composeVolume
 	for _, volume := range volumes.Volumes {
 		if strings.HasPrefix(volume, "./") {
 			paths := strings.Split(volume, ":")
-			result = append(result, &ComposeVolume{
+			result = append(result, &composeVolume{
 				Type:        "bind",
 				Origin:      paths[0],
 				Destination: paths[1],
@@ -194,7 +194,7 @@ func (m *Magicompose) parseRawVolumes(ctx context.Context, service string) ([]*C
 		} else {
 			paths := strings.Split(volume, ":")
 
-			result = append(result, &ComposeVolume{
+			result = append(result, &composeVolume{
 				Type:        "volume",
 				Origin:      paths[0],
 				Destination: paths[1],

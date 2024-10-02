@@ -1,33 +1,33 @@
 package main
 
-type ComposeVolume struct {
+type composeVolume struct {
 	Type string
 	Origin string
 	Destination string
 }
 
-type ComposeEnv struct {
+type composeEnv struct {
 	Name string
 	Value *string
 }
 
-type ComposePort struct {
+type composePort struct {
 	Protocol string
 	Port string
 	Target int
 }
 
-type ComposeService struct {
+type composeService struct {
 	Name string
 	Image string
 	Command []string
-	Volumes []*ComposeVolume
-	Env []*ComposeEnv
-	Ports []*ComposePort
+	Volumes []*composeVolume
+	Env []*composeEnv
+	Ports []*composePort
 }
 
-type Compose struct {
-	Services []*ComposeService
+type compose struct {
+	Services []*composeService
 }
 
 type rawCompose struct {
